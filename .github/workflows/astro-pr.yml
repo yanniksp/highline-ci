@@ -56,3 +56,20 @@ jobs:
 
       - name: Smoke-Test
         run: node .highline-ci/smoke.mjs "${{ inputs.dist-dir }}"
+
+      # Der Fehler vom 03.09.2026 war Build gruen, Deploy kaputt. Die beiden
+      # folgenden Schritte pruefen den Deploy, nicht den Build.
+      #
+      # Der Dry-Run braucht KEINE Cloudflare-Zugangsdaten (nachgemessen mit
+      # leerem WRANGLER_HOME: exit 0). Er faengt, was wrangler beim Parsen
+      # ablehnt -- fehlendes compatibility_date etwa.
+      - name: Deploy-Probelauf (ohne Zugangsdaten)
+        if: hashFiles('wrangler.jsonc', 'wrangler.json', 'wrangler.toml') != ''
+        run: npx wrangler deploy --dry-run
+
+      # Der Dry-Run faengt den 03.09.-Fehler NICHT: eine KV-Bindung ohne "id"
+      # laesst er mit exit 0 durch, provisioniert wird erst beim echten Deploy.
+      # Deshalb zusaetzlich die Invarianten der generierten Config.
+      - name: Deploy-Konfiguration pruefen
+        if: hashFiles('wrangler.jsonc', 'wrangler.json') != ''
+        run: node .highline-ci/check-deploy-config.mjs
