@@ -1,0 +1,58 @@
+name: Astro PR
+
+# Wiederverwendbarer Workflow fuer alle Highline-Astro-Sites.
+# Aufruf im Kundenrepo: siehe README.
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node-Hauptversion"
+        type: string
+        default: "22"
+      dist-dir:
+        description: "Gebauter Client-Output fuer den Smoke-Test"
+        type: string
+        default: "dist/client"
+
+jobs:
+  build:
+    name: Build & Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: astro-pr-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Repo auschecken
+        uses: actions/checkout@v7
+
+      - name: Node einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Abhaengigkeiten (aus dem Lockfile)
+        run: npm ci
+
+      # Kein "astro check": Instaltec hat 22 offene Typfehler (Stand 03.09.2026).
+      # Typecheck kommt dazu, wenn die abgeraeumt sind - nicht als Blocker am Tag eins.
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+
+      # Bewusst erst NACH Lint und Build: das Werkzeug-Repo liegt sonst im
+      # Workspace, waehrend biome und astro ueber "." laufen.
+      - name: CI-Werkzeuge holen
+        uses: actions/checkout@v7
+        with:
+          repository: yanniksp/highline-ci
+          ref: main
+          path: .highline-ci
+
+      - name: Smoke-Test
+        run: node .highline-ci/smoke.mjs "${{ inputs.dist-dir }}"
